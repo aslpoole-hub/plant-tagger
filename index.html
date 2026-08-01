@@ -145,8 +145,13 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
         </div>
 
         <label for="structure">Where it lives</label>
-        <input id="structure" list="structures" placeholder="The gazebo, the big oak…">
-        <datalist id="structures"></datalist>
+        <select id="structure">
+          <option value="">Choose a place…</option>
+        </select>
+        <div id="detailWrap" class="hidden">
+          <label for="structureDetail" id="detailLabel">Which one?</label>
+          <input id="structureDetail" placeholder="">
+        </div>
 
         <div class="row">
           <div>
@@ -224,8 +229,34 @@ const SUPABASE_KEY = "sb_publishable_whHm-BpUy_sIvzu8-cFemg_ewslorW8";
 const BUCKET = "plant-photos";
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const PLACES = [
+  "Fairy Garden",
+  "Pergola 1", "Pergola 2", "Pergola 3", "Pergola 4", "Pergola 5",
+  "Tree", "Log", "Other"
+];
+const NEEDS_DETAIL = {
+  "Tree":  { label:"Which tree?",  hint:"The big oak, the one by the fence…" },
+  "Log":   { label:"Which log?",   hint:"Anything that tells them apart" },
+  "Other": { label:"Where is it?", hint:"Describe the spot" }
+};
+
 const $ = id => document.getElementById(id);
 const show = (id, on) => $(id).classList.toggle("hidden", !on);
+
+function placeLabel(p){
+  if (!p.structure) return "";
+  return p.structure_detail ? `${p.structure} — ${p.structure_detail}` : p.structure;
+}
+function syncDetailField(){
+  const need = NEEDS_DETAIL[$("structure").value];
+  show("detailWrap", !!need);
+  if (need){
+    $("detailLabel").textContent = need.label;
+    $("structureDetail").placeholder = need.hint;
+  } else {
+    $("structureDetail").value = "";
+  }
+}
 let editingId = null;
 let currentPlant = null;
 let lightboxPhoto = null;
@@ -348,8 +379,6 @@ async function loadPlants(){
   const { data, error } = await db.from("plant_overview").select("*").order("tag_number");
   if (error) { $("plants").innerHTML = `<div class="err">${error.message}</div>`; return; }
   $("count").textContent = data.length;
-  const places = [...new Set(data.map(p=>p.structure).filter(Boolean))];
-  $("structures").innerHTML = places.map(s=>`<option value="${s}">`).join("");
   if (!data.length){ $("plants").innerHTML = `<div class="empty">Nothing yet. Add your first plant below.</div>`; return; }
   const urls = await signedUrls(data.map(p => p.latest_photo));
   $("plants").innerHTML = data.map(p => `
@@ -359,7 +388,7 @@ async function loadPlants(){
         : `<span class="tag">${p.tag_number}</span>`}
       <div style="flex:1">
         <h3>${p.latest_photo ? p.tag_number + " · " : ""}${p.name}</h3>
-        <div class="meta">${[p.variety, p.structure].filter(Boolean).join(" · ") || "&nbsp;"}</div>
+        <div class="meta">${[p.variety, placeLabel(p)].filter(Boolean).join(" · ") || "&nbsp;"}</div>
         <div style="margin-top:6px">
           ${p.currently_blooming ? '<span class="pill flower">blooming now</span>' : ""}
           ${p.bloom_color ? `<span class="pill">${p.bloom_color}</span>` : ""}
@@ -376,7 +405,7 @@ async function openPlant(p){
   show("listView",false); show("formView",false); show("detailView",true); show("bar",false);
   $("dTag").textContent = p.tag_number;
   $("dName").textContent = p.name;
-  $("dSub").textContent = [p.variety, p.structure].filter(Boolean).join(" · ") || "";
+  $("dSub").textContent = [p.variety, placeLabel(p)].filter(Boolean).join(" · ") || "";
   const facts = [
     p.bloom_color && ["Bloom color", p.bloom_color],
     p.purchased_on && ["Purchased", fmt(p.purchased_on) + (p.purchased_from ? ` from ${p.purchased_from}` : "")],
@@ -484,8 +513,9 @@ $("bloomPhotoInput").onchange = async e => {
 $("addBtn").onclick = async () => {
   editingId = null;
   $("formTitle").textContent = "Add a plant";
-  ["name","variety","color","structure","pfrom","notes"].forEach(i => $(i).value = "");
+  ["name","variety","color","structure","structureDetail","pfrom","notes"].forEach(i => $(i).value = "");
   $("pdate").value = "";
+  syncDetailField();
   const { data } = await db.from("plants").select("tag_number").order("tag_number",{ascending:false}).limit(1);
   $("tag").value = data && data.length ? data[0].tag_number + 1 : 1;
   show("listView",false); show("formView",true); show("detailView",false); show("bar",false);
@@ -499,6 +529,9 @@ $("editBtn").onclick = () => {
   $("tag").value = p.tag_number;
   $("name").value = p.name || ""; $("variety").value = p.variety || "";
   $("color").value = p.bloom_color || ""; $("structure").value = p.structure || "";
+  $("structureDetail").value = p.structure_detail || "";
+  syncDetailField();
+  $("structureDetail").value = p.structure_detail || "";
   $("pdate").value = p.purchased_on || ""; $("pfrom").value = p.purchased_from || "";
   $("notes").value = p.notes || "";
   show("detailView",false); show("formView",true);
@@ -514,7 +547,8 @@ $("save").onclick = async () => {
     name,
     variety: $("variety").value.trim() || null,
     bloom_color: $("color").value.trim() || null,
-    structure: $("structure").value.trim() || null,
+    structure: $("structure").value || null,
+    structure_detail: (NEEDS_DETAIL[$("structure").value] && $("structureDetail").value.trim()) || null,
     purchased_on: $("pdate").value || null,
     purchased_from: $("pfrom").value.trim() || null,
     notes: $("notes").value.trim() || null
@@ -528,6 +562,10 @@ $("save").onclick = async () => {
   say(editingId ? "Saved." : `Saved as tag ${$("tag").value}. Put that number on the plant.`);
   showList();
 };
+
+$("structure").innerHTML = `<option value="">Choose a place…</option>` +
+  PLACES.map(p => `<option value="${p}">${p}</option>`).join("");
+$("structure").onchange = syncDetailField;
 
 boot();
 </script>
