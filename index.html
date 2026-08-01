@@ -434,7 +434,7 @@ function renderPlants(){
         <div style="margin-top:6px">
           ${p.currently_blooming ? '<span class="pill flower">blooming now</span>' : ""}
           ${p.bloom_color ? `<span class="pill">${p.bloom_color}</span>` : ""}
-          ${p.age_years !== null ? `<span class="pill">${p.age_years} yr</span>` : ""}
+          ${p.age_years >= 1 ? `<span class="pill">owned ${p.age_years} yr</span>` : ""}
         </div>
       </div>
     </div>`).join("");
@@ -461,7 +461,9 @@ async function openPlant(p){
   const facts = [
     p.bloom_color && ["Bloom color", p.bloom_color],
     p.purchased_on && ["Purchased", fmt(p.purchased_on) + (p.purchased_from ? ` from ${p.purchased_from}` : "")],
-    p.age_years !== null && ["Age", p.age_years + (p.age_years === 1 ? " year" : " years")],
+    p.age_years !== null && ["Owned", p.age_years >= 1
+      ? p.age_years + (p.age_years === 1 ? " year" : " years")
+      : "since " + fmt(p.purchased_on)],
     p.last_bloomed && ["Last bloomed", fmt(p.last_bloomed)]
   ].filter(Boolean);
   $("dFacts").innerHTML = facts.map(([k,v]) => `<div class="bloomrow"><span class="meta">${k}</span><span>${v}</span></div>`).join("");
