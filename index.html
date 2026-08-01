@@ -240,10 +240,11 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const PLACES = [
   "Fairy Garden",
   "Pergola 1", "Pergola 2", "Pergola 3", "Pergola 4", "Pergola 5",
+  "Big Tree",
   "Tree", "Log", "Other"
 ];
 const NEEDS_DETAIL = {
-  "Tree":  { label:"Which tree?",  hint:"The big oak, the one by the fence…" },
+  "Tree":  { label:"Which tree?",  hint:"A tree that isn't Big Tree" },
   "Log":   { label:"Which log?",   hint:"Anything that tells them apart" },
   "Other": { label:"Where is it?", hint:"Describe the spot" }
 };
