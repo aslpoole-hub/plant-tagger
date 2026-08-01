@@ -53,9 +53,10 @@ button.bloom{background:var(--bloom); color:#fff; border:0; padding:10px 14px; b
   min-width:44px; height:44px; padding:0 8px; border-radius:10px;
   background:var(--leaf); color:var(--green-dark); font-weight:700; font-size:18px;
 }
-.plant{display:flex; gap:14px; align-items:flex-start; padding:14px 0; border-bottom:1px solid var(--line); cursor:pointer}
+.plant{display:flex; gap:12px; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); cursor:pointer}
 .plant:last-child{border-bottom:0}
 .plant h3{margin:0 0 2px; font-size:17px; font-weight:600}
+.thumb{width:56px; height:56px; border-radius:10px; object-fit:cover; background:var(--leaf); flex:0 0 auto}
 .meta{font-size:14px; color:var(--muted)}
 .pill{display:inline-block; font-size:12px; padding:3px 9px; border-radius:99px; background:var(--leaf); color:var(--green-dark); margin-right:6px}
 .pill.flower{background:#fbe9f0; color:var(--bloom)}
@@ -69,6 +70,16 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
 .hidden{display:none}
 .bloomrow{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:15px}
 .bloomrow:last-child{border-bottom:0}
+.gallery{display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:8px}
+.gallery figure{margin:0}
+.gallery img{width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; background:var(--leaf); display:block; cursor:pointer}
+.gallery figcaption{font-size:12px; color:var(--muted); margin-top:3px; text-align:center}
+.hero{width:100%; max-height:280px; object-fit:cover; border-radius:12px; margin-bottom:12px; display:block}
+.lightbox{position:fixed; inset:0; background:rgba(0,0,0,.9); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px}
+.lightbox img{max-width:100%; max-height:82vh; border-radius:10px}
+.lightbox .close{position:absolute; top:calc(14px + env(safe-area-inset-top)); right:16px; background:rgba(255,255,255,.2); color:#fff; border:0; border-radius:8px; padding:10px 14px; font-size:16px; cursor:pointer}
+.lightbox .del{position:absolute; bottom:calc(20px + env(safe-area-inset-bottom)); background:rgba(255,255,255,.15); color:#fff; border:0; border-radius:8px; padding:10px 16px; font-size:15px; cursor:pointer}
+.busy{font-size:14px; color:var(--muted); margin-top:8px}
 </style>
 </head>
 <body>
@@ -160,6 +171,7 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
 
     <div id="detailView" class="hidden">
       <div class="card">
+        <img id="dHero" class="hero hidden" alt="">
         <div class="row" style="align-items:center">
           <div style="flex:0 0 auto"><span class="tag" id="dTag">—</span></div>
           <div style="flex:1">
@@ -172,10 +184,20 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
       </div>
 
       <div class="card">
+        <h2>Photos</h2>
+        <div id="dPhotos"><div class="empty">No photos yet</div></div>
+        <div id="photoBusy" class="busy hidden">Adding photo…</div>
+        <div style="height:12px"></div>
+        <button class="ghost" id="photoBtn" style="width:100%">Add a photo</button>
+        <input id="photoInput" type="file" accept="image/*" multiple class="hidden">
+      </div>
+
+      <div class="card">
         <h2>Blooms</h2>
         <div id="dBlooms"><div class="empty">No blooms recorded yet</div></div>
         <div style="height:12px"></div>
         <button class="bloom" id="bloomBtn" style="width:100%">Mark bloom started</button>
+        <input id="bloomPhotoInput" type="file" accept="image/*" capture="environment" class="hidden">
       </div>
 
       <button class="ghost" id="editBtn" style="width:100%; margin-bottom:10px">Edit this plant</button>
@@ -189,16 +211,24 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
   <button class="primary" id="addBtn">Add a plant</button>
 </div>
 
+<div id="lightbox" class="lightbox hidden">
+  <button class="close" id="lbClose">Close</button>
+  <img id="lbImg" alt="">
+  <button class="del" id="lbDel">Delete this photo</button>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 const SUPABASE_URL = "https://zzapspmjrpgwizdtlikr.supabase.co";
 const SUPABASE_KEY = "sb_publishable_whHm-BpUy_sIvzu8-cFemg_ewslorW8";
+const BUCKET = "plant-photos";
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const $ = id => document.getElementById(id);
 const show = (id, on) => $(id).classList.toggle("hidden", !on);
 let editingId = null;
 let currentPlant = null;
+let lightboxPhoto = null;
 
 function say(text, kind){
   $("msg").innerHTML = text ? `<div class="${kind||"ok"}">${text}</div>` : "";
@@ -215,9 +245,66 @@ function today(){
 }
 function daysBetween(a,b){ return Math.round((b-a)/86400000); }
 
+async function signedUrl(path){
+  if (!path) return null;
+  const { data } = await db.storage.from(BUCKET).createSignedUrl(path, 3600);
+  return data ? data.signedUrl : null;
+}
+async function signedUrls(paths){
+  const clean = paths.filter(Boolean);
+  if (!clean.length) return {};
+  const { data } = await db.storage.from(BUCKET).createSignedUrls(clean, 3600);
+  const map = {};
+  (data||[]).forEach(d => { if (d.signedUrl) map[d.path] = d.signedUrl; });
+  return map;
+}
+
+function shrink(file, max = 1600, quality = 0.82){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width:w, height:h } = img;
+      if (w > max || h > max){
+        const s = max / Math.max(w,h);
+        w = Math.round(w*s); h = Math.round(h*s);
+      }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      c.toBlob(b => b ? resolve(b) : reject(new Error("Could not read that image")), "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That file is not an image I can read")); };
+    img.src = url;
+  });
+}
+
+async function uploadPhotos(files, plantId, bloomId){
+  show("photoBusy", true);
+  let done = 0;
+  for (const file of files){
+    try {
+      const blob = await shrink(file);
+      const path = `${plantId}/${crypto.randomUUID()}.jpg`;
+      const up = await db.storage.from(BUCKET).upload(path, blob, { contentType:"image/jpeg" });
+      if (up.error) throw up.error;
+      const ins = await db.from("photos").insert({ plant_id:plantId, bloom_id:bloomId || null, path });
+      if (ins.error) throw ins.error;
+      done++;
+    } catch (e){
+      say(e.message || "That photo would not upload", "err");
+    }
+  }
+  show("photoBusy", false);
+  if (done) say(done === 1 ? "Photo added." : `${done} photos added.`);
+  return done;
+}
+
 async function boot(){
   const { data:{ session } } = await db.auth.getSession();
-  if (session) enterApp(); else { show("login",true); show("app",false); show("bar",false); show("signout",false); }
+  if (session) enterApp();
+  else { show("login",true); show("app",false); show("bar",false); show("signout",false); }
 }
 
 $("signin").onclick = async () => {
@@ -244,10 +331,10 @@ async function loadFert(){
   if (!data.length) return $("fert").textContent = "Not recorded yet.";
   const last = data[0].occurred_on;
   const gap = daysBetween(new Date(last), new Date());
-  const due = 91 - gap;
+  const next = new Date(new Date(last).getTime() + 91*86400000).toISOString().slice(0,10);
   $("fert").innerHTML = `Last done <strong>${fmt(last)}</strong> — ${gap} days ago.<br>` +
-    (due > 0 ? `<span class="meta">Next around ${fmt(new Date(new Date(last).getTime()+91*86400000).toISOString().slice(0,10))}.</span>`
-             : `<span style="color:var(--warn)">Due now.</span>`);
+    (91 - gap > 0 ? `<span class="meta">Next around ${fmt(next)}.</span>`
+                  : `<span style="color:var(--warn)">Due now.</span>`);
 }
 
 $("fertBtn").onclick = async () => {
@@ -264,11 +351,14 @@ async function loadPlants(){
   const places = [...new Set(data.map(p=>p.structure).filter(Boolean))];
   $("structures").innerHTML = places.map(s=>`<option value="${s}">`).join("");
   if (!data.length){ $("plants").innerHTML = `<div class="empty">Nothing yet. Add your first plant below.</div>`; return; }
+  const urls = await signedUrls(data.map(p => p.latest_photo));
   $("plants").innerHTML = data.map(p => `
     <div class="plant" data-id="${p.id}">
-      <span class="tag">${p.tag_number}</span>
+      ${p.latest_photo && urls[p.latest_photo]
+        ? `<img class="thumb" src="${urls[p.latest_photo]}" alt="">`
+        : `<span class="tag">${p.tag_number}</span>`}
       <div style="flex:1">
-        <h3>${p.name}</h3>
+        <h3>${p.latest_photo ? p.tag_number + " · " : ""}${p.name}</h3>
         <div class="meta">${[p.variety, p.structure].filter(Boolean).join(" · ") || "&nbsp;"}</div>
         <div style="margin-top:6px">
           ${p.currently_blooming ? '<span class="pill flower">blooming now</span>' : ""}
@@ -295,8 +385,56 @@ async function openPlant(p){
   ].filter(Boolean);
   $("dFacts").innerHTML = facts.map(([k,v]) => `<div class="bloomrow"><span class="meta">${k}</span><span>${v}</span></div>`).join("");
   $("dNotes").textContent = p.notes || "";
+  loadPhotos(p.id);
   loadBlooms(p.id);
 }
+
+async function loadPhotos(plantId){
+  const { data, error } = await db.from("photos").select("*").eq("plant_id",plantId)
+    .order("taken_on",{ascending:false}).order("created_at",{ascending:false});
+  if (error){ $("dPhotos").innerHTML = `<div class="err">${error.message}</div>`; return; }
+  const hero = $("dHero");
+  if (!data.length){
+    $("dPhotos").innerHTML = `<div class="empty">No photos yet</div>`;
+    hero.classList.add("hidden");
+    return;
+  }
+  const urls = await signedUrls(data.map(p => p.path));
+  hero.src = urls[data[0].path] || "";
+  hero.classList.toggle("hidden", !urls[data[0].path]);
+  $("dPhotos").innerHTML = `<div class="gallery">` + data.map(ph => `
+    <figure>
+      <img src="${urls[ph.path]||""}" data-id="${ph.id}" data-path="${ph.path}" alt="">
+      <figcaption>${fmt(ph.taken_on)}</figcaption>
+    </figure>`).join("") + `</div>`;
+  $("dPhotos").querySelectorAll("img").forEach(img => {
+    img.onclick = () => {
+      lightboxPhoto = { id: img.dataset.id, path: img.dataset.path };
+      $("lbImg").src = img.src;
+      show("lightbox", true);
+    };
+  });
+}
+
+$("photoBtn").onclick = () => $("photoInput").click();
+$("photoInput").onchange = async e => {
+  const files = [...e.target.files];
+  e.target.value = "";
+  if (!files.length) return;
+  if (await uploadPhotos(files, currentPlant.id, null)) loadPhotos(currentPlant.id);
+};
+
+$("lbClose").onclick = () => { show("lightbox", false); lightboxPhoto = null; };
+$("lbDel").onclick = async () => {
+  if (!lightboxPhoto) return;
+  if (!confirm("Delete this photo? It cannot be undone.")) return;
+  await db.storage.from(BUCKET).remove([lightboxPhoto.path]);
+  const { error } = await db.from("photos").delete().eq("id", lightboxPhoto.id);
+  show("lightbox", false);
+  if (error) return say(error.message,"err");
+  say("Photo deleted.");
+  loadPhotos(currentPlant.id);
+};
 
 async function loadBlooms(plantId){
   const { data, error } = await db.from("blooms").select("*").eq("plant_id",plantId).order("started_on",{ascending:false});
@@ -320,12 +458,27 @@ $("bloomBtn").onclick = async () => {
     const { error } = await db.from("blooms").update({ ended_on: today() }).eq("id", openId);
     if (error) return say(error.message,"err");
     say("Bloom finished.");
+    loadBlooms(currentPlant.id);
   } else {
-    const { error } = await db.from("blooms").insert({ plant_id: currentPlant.id, started_on: today() });
+    const { data, error } = await db.from("blooms")
+      .insert({ plant_id: currentPlant.id, started_on: today() }).select().single();
     if (error) return say(error.message,"err");
-    say("Bloom started.");
+    loadBlooms(currentPlant.id);
+    if (confirm("Bloom recorded. Take a photo of it now?")){
+      $("bloomPhotoInput").dataset.bloom = data.id;
+      $("bloomPhotoInput").click();
+    } else {
+      say("Bloom started.");
+    }
   }
-  loadBlooms(currentPlant.id);
+};
+
+$("bloomPhotoInput").onchange = async e => {
+  const files = [...e.target.files];
+  const bloomId = e.target.dataset.bloom || null;
+  e.target.value = "";
+  if (!files.length) return;
+  if (await uploadPhotos(files, currentPlant.id, bloomId)) loadPhotos(currentPlant.id);
 };
 
 $("addBtn").onclick = async () => {
