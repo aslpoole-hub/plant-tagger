@@ -113,7 +113,15 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
       </div>
 
       <div class="card">
-        <h2>Your plants (<span id="count">0</span>)</h2>
+        <input id="search" type="search" inputmode="search" placeholder="Tag number, name or variety">
+        <div class="row" style="margin-top:10px; align-items:center">
+          <select id="placeFilter"><option value="">All places</option></select>
+          <button class="ghost" id="bloomFilter" data-on="0" style="flex:0 0 auto">Blooming now</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span id="count">0</span> plants</h2>
         <div id="plants"><div class="empty">Loading…</div></div>
       </div>
     </div>
@@ -375,12 +383,46 @@ $("fertBtn").onclick = async () => {
   loadFert();
 };
 
+let allPlants = [];
+let photoUrls = {};
+
 async function loadPlants(){
   const { data, error } = await db.from("plant_overview").select("*").order("tag_number");
   if (error) { $("plants").innerHTML = `<div class="err">${error.message}</div>`; return; }
-  $("count").textContent = data.length;
-  if (!data.length){ $("plants").innerHTML = `<div class="empty">Nothing yet. Add your first plant below.</div>`; return; }
-  const urls = await signedUrls(data.map(p => p.latest_photo));
+  allPlants = data;
+  photoUrls = await signedUrls(data.map(p => p.latest_photo));
+  const used = [...new Set(data.map(p => p.structure).filter(Boolean))];
+  $("placeFilter").innerHTML = `<option value="">All places</option>` +
+    used.map(s => `<option value="${s}">${s}</option>`).join("");
+  renderPlants();
+}
+
+function renderPlants(){
+  const q = $("search").value.trim().toLowerCase();
+  const place = $("placeFilter").value;
+  const bloomOnly = $("bloomFilter").dataset.on === "1";
+
+  let data = allPlants;
+  if (place) data = data.filter(p => p.structure === place);
+  if (bloomOnly) data = data.filter(p => p.currently_blooming);
+  if (q){
+    const asNum = /^\d+$/.test(q) ? parseInt(q,10) : null;
+    data = data.filter(p =>
+      (asNum !== null && p.tag_number === asNum) ||
+      [p.name, p.variety, p.bloom_color, p.structure, p.structure_detail, p.notes]
+        .filter(Boolean).some(v => v.toLowerCase().includes(q)) ||
+      String(p.tag_number).startsWith(q)
+    );
+  }
+
+  $("count").textContent = data.length === allPlants.length
+    ? allPlants.length
+    : `${data.length} of ${allPlants.length}`;
+
+  if (!allPlants.length){ $("plants").innerHTML = `<div class="empty">Nothing yet. Add your first plant below.</div>`; return; }
+  if (!data.length){ $("plants").innerHTML = `<div class="empty">Nothing matches that.</div>`; return; }
+
+  const urls = photoUrls;
   $("plants").innerHTML = data.map(p => `
     <div class="plant" data-id="${p.id}">
       ${p.latest_photo && urls[p.latest_photo]
@@ -397,8 +439,18 @@ async function loadPlants(){
       </div>
     </div>`).join("");
   document.querySelectorAll(".plant").forEach(el =>
-    el.onclick = () => openPlant(data.find(p => p.id === el.dataset.id)));
+    el.onclick = () => openPlant(allPlants.find(p => p.id === el.dataset.id)));
 }
+
+$("search").oninput = renderPlants;
+$("placeFilter").onchange = renderPlants;
+$("bloomFilter").onclick = () => {
+  const b = $("bloomFilter");
+  const on = b.dataset.on === "1";
+  b.dataset.on = on ? "0" : "1";
+  b.style.background = on ? "var(--white)" : "var(--leaf)";
+  renderPlants();
+};
 
 async function openPlant(p){
   currentPlant = p;
