@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plant Tagger</title>
+<style>
+:root{
+  --green:#2f6b3a; --green-dark:#1f4a27; --leaf:#eaf2e7;
+  --ink:#1c1f1a; --muted:#6b7266; --line:#dfe3da; --bg:#f7f8f4;
+  --white:#fff; --bloom:#b4436c; --warn:#8a5a12;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg); color:var(--ink); font-size:17px; line-height:1.5;
+  -webkit-text-size-adjust:100%;
+}
+header{
+  background:var(--green); color:#fff; padding:14px 16px;
+  display:flex; align-items:center; gap:12px;
+  position:sticky; top:0; z-index:10;
+  padding-top:calc(14px + env(safe-area-inset-top));
+}
+header h1{font-size:19px; margin:0; font-weight:600; flex:1}
+header button{
+  background:rgba(255,255,255,.16); color:#fff; border:0;
+  padding:8px 12px; border-radius:8px; font-size:15px; cursor:pointer;
+}
+main{padding:16px; max-width:760px; margin:0 auto; padding-bottom:96px}
+.card{background:var(--white); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px}
+label{display:block; font-size:14px; color:var(--muted); margin:12px 0 4px; font-weight:500}
+input,select,textarea{
+  width:100%; padding:12px; font-size:17px; font-family:inherit;
+  border:1px solid var(--line); border-radius:9px; background:var(--white); color:var(--ink);
+}
+textarea{min-height:74px; resize:vertical}
+button.primary{
+  background:var(--green); color:#fff; border:0; padding:14px 18px;
+  border-radius:10px; font-size:17px; font-weight:600; cursor:pointer; width:100%;
+}
+button.primary:disabled{opacity:.5}
+button.ghost{
+  background:var(--white); color:var(--green-dark); border:1px solid var(--line);
+  padding:10px 14px; border-radius:9px; font-size:15px; cursor:pointer;
+}
+button.bloom{background:var(--bloom); color:#fff; border:0; padding:10px 14px; border-radius:9px; font-size:15px; cursor:pointer}
+.row{display:flex; gap:10px; flex-wrap:wrap}
+.row>*{flex:1; min-width:140px}
+.tag{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:44px; height:44px; padding:0 8px; border-radius:10px;
+  background:var(--leaf); color:var(--green-dark); font-weight:700; font-size:18px;
+}
+.plant{display:flex; gap:14px; align-items:flex-start; padding:14px 0; border-bottom:1px solid var(--line); cursor:pointer}
+.plant:last-child{border-bottom:0}
+.plant h3{margin:0 0 2px; font-size:17px; font-weight:600}
+.meta{font-size:14px; color:var(--muted)}
+.pill{display:inline-block; font-size:12px; padding:3px 9px; border-radius:99px; background:var(--leaf); color:var(--green-dark); margin-right:6px}
+.pill.flower{background:#fbe9f0; color:var(--bloom)}
+.empty{text-align:center; color:var(--muted); padding:34px 10px}
+.err{background:#fdecec; color:#8a1f1f; padding:12px; border-radius:9px; margin-bottom:12px; font-size:15px}
+.ok{background:var(--leaf); color:var(--green-dark); padding:12px; border-radius:9px; margin-bottom:12px; font-size:15px}
+h2{font-size:16px; margin:0 0 10px; font-weight:600}
+.hint{font-size:13px; color:var(--muted); margin-top:4px}
+.bar{position:fixed; left:0; right:0; bottom:0; background:var(--white); border-top:1px solid var(--line); padding:10px 16px calc(10px + env(safe-area-inset-bottom)); display:flex; gap:10px; max-width:760px; margin:0 auto}
+.bar button{flex:1}
+.hidden{display:none}
+.bloomrow{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:15px}
+.bloomrow:last-child{border-bottom:0}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Plant tagger</h1>
+  <button id="signout" class="hidden">Sign out</button>
+</header>
+
+<main>
+  <div id="msg"></div>
+
+  <div id="login" class="card hidden">
+    <h2>Sign in</h2>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username" inputmode="email">
+    <label for="pw">Password</label>
+    <input id="pw" type="password" autocomplete="current-password">
+    <div style="height:14px"></div>
+    <button class="primary" id="signin">Sign in</button>
+  </div>
+
+  <div id="app" class="hidden">
+
+    <div id="listView">
+      <div class="card">
+        <h2>Fertilizing</h2>
+        <div id="fert" class="meta">Loading…</div>
+        <div style="height:10px"></div>
+        <button class="ghost" id="fertBtn">Fertilized everything today</button>
+      </div>
+
+      <div class="card">
+        <h2>Your plants (<span id="count">0</span>)</h2>
+        <div id="plants"><div class="empty">Loading…</div></div>
+      </div>
+    </div>
+
+    <div id="formView" class="hidden">
+      <div class="card">
+        <h2 id="formTitle">Add a plant</h2>
+        <div class="row">
+          <div style="flex:0 0 110px">
+            <label for="tag">Tag number</label>
+            <input id="tag" type="number" inputmode="numeric" readonly>
+            <div class="hint">Set for you</div>
+          </div>
+          <div>
+            <label for="name">Name</label>
+            <input id="name" placeholder="What you call it">
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="variety">Variety or species</label>
+            <input id="variety" placeholder="If you know it">
+          </div>
+          <div>
+            <label for="color">Bloom color</label>
+            <input id="color" placeholder="Purple, white…">
+          </div>
+        </div>
+
+        <label for="structure">Where it lives</label>
+        <input id="structure" list="structures" placeholder="The gazebo, the big oak…">
+        <datalist id="structures"></datalist>
+
+        <div class="row">
+          <div>
+            <label for="pdate">Purchased on</label>
+            <input id="pdate" type="date">
+          </div>
+          <div>
+            <label for="pfrom">Purchased from</label>
+            <input id="pfrom" placeholder="Vendor, show, person">
+          </div>
+        </div>
+
+        <label for="notes">Notes</label>
+        <textarea id="notes" placeholder="Repotted it, likes this corner…"></textarea>
+
+        <div style="height:16px"></div>
+        <button class="primary" id="save">Save plant</button>
+        <div style="height:10px"></div>
+        <button class="ghost" id="cancel" style="width:100%">Cancel</button>
+      </div>
+    </div>
+
+    <div id="detailView" class="hidden">
+      <div class="card">
+        <div class="row" style="align-items:center">
+          <div style="flex:0 0 auto"><span class="tag" id="dTag">—</span></div>
+          <div style="flex:1">
+            <h2 id="dName" style="margin:0">—</h2>
+            <div class="meta" id="dSub">—</div>
+          </div>
+        </div>
+        <div id="dFacts" style="margin-top:14px"></div>
+        <div id="dNotes" class="meta" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <h2>Blooms</h2>
+        <div id="dBlooms"><div class="empty">No blooms recorded yet</div></div>
+        <div style="height:12px"></div>
+        <button class="bloom" id="bloomBtn" style="width:100%">Mark bloom started</button>
+      </div>
+
+      <button class="ghost" id="editBtn" style="width:100%; margin-bottom:10px">Edit this plant</button>
+      <button class="ghost" id="backBtn" style="width:100%">Back to all plants</button>
+    </div>
+
+  </div>
+</main>
+
+<div class="bar hidden" id="bar">
+  <button class="primary" id="addBtn">Add a plant</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL = "https://zzapspmjrpgwizdtlikr.supabase.co";
+const SUPABASE_KEY = "sb_publishable_ltaNA7nnVozoSCOcZIjg";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const $ = id => document.getElementById(id);
+const show = (id, on) => $(id).classList.toggle("hidden", !on);
+let editingId = null;
+let currentPlant = null;
+
+function say(text, kind){
+  $("msg").innerHTML = text ? `<div class="${kind||"ok"}">${text}</div>` : "";
+  if (text) setTimeout(() => { $("msg").innerHTML = ""; }, 4000);
+}
+function fmt(d){
+  if (!d) return null;
+  const [y,m,dd] = d.split("-");
+  return new Date(y, m-1, dd).toLocaleDateString(undefined,{month:"short", day:"numeric", year:"numeric"});
+}
+function today(){
+  const t = new Date();
+  return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
+}
+function daysBetween(a,b){ return Math.round((b-a)/86400000); }
+
+async function boot(){
+  const { data:{ session } } = await db.auth.getSession();
+  if (session) enterApp(); else { show("login",true); show("app",false); show("bar",false); show("signout",false); }
+}
+
+$("signin").onclick = async () => {
+  const { error } = await db.auth.signInWithPassword({ email:$("email").value.trim(), password:$("pw").value });
+  if (error) return say(error.message, "err");
+  enterApp();
+};
+$("signout").onclick = async () => { await db.auth.signOut(); location.reload(); };
+
+function enterApp(){
+  show("login",false); show("app",true); show("bar",true); show("signout",true);
+  showList();
+}
+
+function showList(){
+  show("listView",true); show("formView",false); show("detailView",false); show("bar",true);
+  loadFert(); loadPlants();
+}
+
+async function loadFert(){
+  const { data, error } = await db.from("care_events").select("*")
+    .eq("type","fertilize").order("occurred_on",{ascending:false}).limit(1);
+  if (error) return $("fert").textContent = error.message;
+  if (!data.length) return $("fert").textContent = "Not recorded yet.";
+  const last = data[0].occurred_on;
+  const gap = daysBetween(new Date(last), new Date());
+  const due = 91 - gap;
+  $("fert").innerHTML = `Last done <strong>${fmt(last)}</strong> — ${gap} days ago.<br>` +
+    (due > 0 ? `<span class="meta">Next around ${fmt(new Date(new Date(last).getTime()+91*86400000).toISOString().slice(0,10))}.</span>`
+             : `<span style="color:var(--warn)">Due now.</span>`);
+}
+
+$("fertBtn").onclick = async () => {
+  const { error } = await db.from("care_events").insert({ type:"fertilize", occurred_on:today(), scope:"all" });
+  if (error) return say(error.message,"err");
+  say("Recorded. Set your calendar reminder for three months out.");
+  loadFert();
+};
+
+async function loadPlants(){
+  const { data, error } = await db.from("plant_overview").select("*").order("tag_number");
+  if (error) { $("plants").innerHTML = `<div class="err">${error.message}</div>`; return; }
+  $("count").textContent = data.length;
+  const places = [...new Set(data.map(p=>p.structure).filter(Boolean))];
+  $("structures").innerHTML = places.map(s=>`<option value="${s}">`).join("");
+  if (!data.length){ $("plants").innerHTML = `<div class="empty">Nothing yet. Add your first plant below.</div>`; return; }
+  $("plants").innerHTML = data.map(p => `
+    <div class="plant" data-id="${p.id}">
+      <span class="tag">${p.tag_number}</span>
+      <div style="flex:1">
+        <h3>${p.name}</h3>
+        <div class="meta">${[p.variety, p.structure].filter(Boolean).join(" · ") || "&nbsp;"}</div>
+        <div style="margin-top:6px">
+          ${p.currently_blooming ? '<span class="pill flower">blooming now</span>' : ""}
+          ${p.bloom_color ? `<span class="pill">${p.bloom_color}</span>` : ""}
+          ${p.age_years !== null ? `<span class="pill">${p.age_years} yr</span>` : ""}
+        </div>
+      </div>
+    </div>`).join("");
+  document.querySelectorAll(".plant").forEach(el =>
+    el.onclick = () => openPlant(data.find(p => p.id === el.dataset.id)));
+}
+
+async function openPlant(p){
+  currentPlant = p;
+  show("listView",false); show("formView",false); show("detailView",true); show("bar",false);
+  $("dTag").textContent = p.tag_number;
+  $("dName").textContent = p.name;
+  $("dSub").textContent = [p.variety, p.structure].filter(Boolean).join(" · ") || "";
+  const facts = [
+    p.bloom_color && ["Bloom color", p.bloom_color],
+    p.purchased_on && ["Purchased", fmt(p.purchased_on) + (p.purchased_from ? ` from ${p.purchased_from}` : "")],
+    p.age_years !== null && ["Age", p.age_years + (p.age_years === 1 ? " year" : " years")],
+    p.last_bloomed && ["Last bloomed", fmt(p.last_bloomed)]
+  ].filter(Boolean);
+  $("dFacts").innerHTML = facts.map(([k,v]) => `<div class="bloomrow"><span class="meta">${k}</span><span>${v}</span></div>`).join("");
+  $("dNotes").textContent = p.notes || "";
+  loadBlooms(p.id);
+}
+
+async function loadBlooms(plantId){
+  const { data, error } = await db.from("blooms").select("*").eq("plant_id",plantId).order("started_on",{ascending:false});
+  if (error) return;
+  const open = data.find(b => !b.ended_on);
+  $("bloomBtn").textContent = open ? "Mark bloom finished" : "Mark bloom started";
+  $("bloomBtn").dataset.open = open ? open.id : "";
+  if (!data.length){ $("dBlooms").innerHTML = `<div class="empty">No blooms recorded yet</div>`; return; }
+  $("dBlooms").innerHTML = data.map(b => {
+    const len = b.ended_on ? daysBetween(new Date(b.started_on), new Date(b.ended_on)) : null;
+    return `<div class="bloomrow">
+      <span>${fmt(b.started_on)}${b.ended_on ? " – " + fmt(b.ended_on) : ""}</span>
+      <span class="meta">${b.ended_on ? len + " days" : "still blooming"}</span>
+    </div>`;
+  }).join("");
+}
+
+$("bloomBtn").onclick = async () => {
+  const openId = $("bloomBtn").dataset.open;
+  if (openId){
+    const { error } = await db.from("blooms").update({ ended_on: today() }).eq("id", openId);
+    if (error) return say(error.message,"err");
+    say("Bloom finished.");
+  } else {
+    const { error } = await db.from("blooms").insert({ plant_id: currentPlant.id, started_on: today() });
+    if (error) return say(error.message,"err");
+    say("Bloom started.");
+  }
+  loadBlooms(currentPlant.id);
+};
+
+$("addBtn").onclick = async () => {
+  editingId = null;
+  $("formTitle").textContent = "Add a plant";
+  ["name","variety","color","structure","pfrom","notes"].forEach(i => $(i).value = "");
+  $("pdate").value = "";
+  const { data } = await db.from("plants").select("tag_number").order("tag_number",{ascending:false}).limit(1);
+  $("tag").value = data && data.length ? data[0].tag_number + 1 : 1;
+  show("listView",false); show("formView",true); show("detailView",false); show("bar",false);
+  $("name").focus();
+};
+
+$("editBtn").onclick = () => {
+  const p = currentPlant;
+  editingId = p.id;
+  $("formTitle").textContent = "Edit plant";
+  $("tag").value = p.tag_number;
+  $("name").value = p.name || ""; $("variety").value = p.variety || "";
+  $("color").value = p.bloom_color || ""; $("structure").value = p.structure || "";
+  $("pdate").value = p.purchased_on || ""; $("pfrom").value = p.purchased_from || "";
+  $("notes").value = p.notes || "";
+  show("detailView",false); show("formView",true);
+};
+
+$("cancel").onclick = showList;
+$("backBtn").onclick = showList;
+
+$("save").onclick = async () => {
+  const name = $("name").value.trim();
+  if (!name) return say("Give it a name first.","err");
+  const rec = {
+    name,
+    variety: $("variety").value.trim() || null,
+    bloom_color: $("color").value.trim() || null,
+    structure: $("structure").value.trim() || null,
+    purchased_on: $("pdate").value || null,
+    purchased_from: $("pfrom").value.trim() || null,
+    notes: $("notes").value.trim() || null
+  };
+  $("save").disabled = true;
+  const { error } = editingId
+    ? await db.from("plants").update(rec).eq("id", editingId)
+    : await db.from("plants").insert(rec);
+  $("save").disabled = false;
+  if (error) return say(error.message,"err");
+  say(editingId ? "Saved." : `Saved as tag ${$("tag").value}. Put that number on the plant.`);
+  showList();
+};
+
+boot();
+</script>
+</body>
+</html>
