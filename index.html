@@ -28,6 +28,7 @@ header button{
   background:rgba(255,255,255,.16); color:#fff; border:0;
   padding:8px 12px; border-radius:8px; font-size:15px; cursor:pointer;
 }
+header button.active{background:#fff; color:var(--green-dark); font-weight:600}
 main{padding:16px; max-width:760px; margin:0 auto; padding-bottom:96px}
 .card{background:var(--white); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px}
 label{display:block; font-size:14px; color:var(--muted); margin:12px 0 4px; font-weight:500}
@@ -86,6 +87,8 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
 
 <header>
   <h1>Plant tagger</h1>
+  <button id="tabPlants" class="hidden">Plants</button>
+  <button id="tabSupplies" class="hidden">Supplies</button>
   <button id="signout" class="hidden">Sign out</button>
 </header>
 
@@ -217,11 +220,96 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
       <button class="ghost" id="backBtn" style="width:100%">Back to all plants</button>
     </div>
 
+    <div id="supplyListView" class="hidden">
+      <div class="card">
+        <input id="supplySearch" type="search" placeholder="Product, company or note">
+      </div>
+      <div class="card">
+        <h2><span id="supplyCount">0</span> supplies</h2>
+        <div id="supplies"><div class="empty">Loading…</div></div>
+      </div>
+    </div>
+
+    <div id="supplyFormView" class="hidden">
+      <div class="card">
+        <h2 id="supplyFormTitle">Add a supply</h2>
+
+        <label for="sProduct">Product</label>
+        <input id="sProduct" placeholder="What it is">
+
+        <label for="sItem">Item or catalog number</label>
+        <input id="sItem" placeholder="For reordering the exact same thing">
+
+        <label for="sVendor">Bought from</label>
+        <input id="sVendor" placeholder="Company, shop, show or person">
+
+        <div class="row">
+          <div>
+            <label for="sPhone">Phone</label>
+            <input id="sPhone" type="tel" inputmode="tel" placeholder="Their number">
+          </div>
+          <div>
+            <label for="sSite">Website</label>
+            <input id="sSite" type="url" inputmode="url" placeholder="Where to reorder">
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="sAmount">How much</label>
+            <input id="sAmount" placeholder="5 lb bag, gallon, 50 clips">
+          </div>
+          <div>
+            <label for="sCost">Cost</label>
+            <input id="sCost" type="number" step="0.01" inputmode="decimal" placeholder="0.00">
+          </div>
+        </div>
+
+        <label for="sDate">Bought on</label>
+        <input id="sDate" type="date">
+        <div class="hint">Optional. Tells you how long a bag lasts you.</div>
+
+        <label for="sNotes">Notes</label>
+        <textarea id="sNotes" placeholder="Diluted too strong, plants liked it, small size not worth it…"></textarea>
+
+        <div style="height:16px"></div>
+        <button class="primary" id="supplySave">Save supply</button>
+        <div style="height:10px"></div>
+        <button class="ghost" id="supplyCancel" style="width:100%">Cancel</button>
+      </div>
+    </div>
+
+    <div id="supplyDetailView" class="hidden">
+      <div class="card">
+        <img id="sHero" class="hero hidden" alt="">
+        <h2 id="sName" style="margin:0">—</h2>
+        <div class="meta" id="sSub">—</div>
+        <div id="sFacts" style="margin-top:14px"></div>
+        <div id="sNotesOut" class="meta" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <h2>Photos</h2>
+        <div id="sPhotos"><div class="empty">No photos yet</div></div>
+        <div id="sPhotoBusy" class="busy hidden">Adding photo…</div>
+        <div style="height:12px"></div>
+        <button class="ghost" id="sPhotoBtn" style="width:100%">Add a photo of the label</button>
+        <input id="sPhotoInput" type="file" accept="image/*" multiple class="hidden">
+      </div>
+
+      <button class="ghost" id="supplyEditBtn" style="width:100%; margin-bottom:10px">Edit this supply</button>
+      <button class="ghost" id="supplyBackBtn" style="width:100%">Back to all supplies</button>
+    </div>
+
   </div>
 </main>
 
 <div class="bar hidden" id="bar">
   <button class="primary" id="addBtn">Add a plant</button>
+</div>
+
+<div class="bar hidden" id="supplyBar">
+  <button class="primary" id="addSupplyBtn">Add a supply</button>
 </div>
 
 <div id="lightbox" class="lightbox hidden">
@@ -355,14 +443,34 @@ $("signin").onclick = async () => {
 $("signout").onclick = async () => { await db.auth.signOut(); location.reload(); };
 
 function enterApp(){
-  show("login",false); show("app",true); show("bar",true); show("signout",true);
+  show("login",false); show("app",true); show("signout",true);
+  show("tabPlants",true); show("tabSupplies",true);
   showList();
 }
 
+function hideAllViews(){
+  ["listView","formView","detailView","supplyListView","supplyFormView","supplyDetailView","bar","supplyBar"]
+    .forEach(v => show(v,false));
+}
+
 function showList(){
-  show("listView",true); show("formView",false); show("detailView",false); show("bar",true);
+  hideAllViews();
+  show("listView",true); show("bar",true);
+  $("tabPlants").classList.add("active");
+  $("tabSupplies").classList.remove("active");
   loadFert(); loadPlants();
 }
+
+function showSupplies(){
+  hideAllViews();
+  show("supplyListView",true); show("supplyBar",true);
+  $("tabSupplies").classList.add("active");
+  $("tabPlants").classList.remove("active");
+  loadSupplies();
+}
+
+$("tabPlants").onclick = showList;
+$("tabSupplies").onclick = showSupplies;
 
 async function loadFert(){
   const { data, error } = await db.from("care_events").select("*")
@@ -493,7 +601,7 @@ async function loadPhotos(plantId){
     </figure>`).join("") + `</div>`;
   $("dPhotos").querySelectorAll("img").forEach(img => {
     img.onclick = () => {
-      lightboxPhoto = { id: img.dataset.id, path: img.dataset.path };
+      lightboxPhoto = { id: img.dataset.id, path: img.dataset.path, kind: "plant" };
       $("lbImg").src = img.src;
       show("lightbox", true);
     };
@@ -512,12 +620,14 @@ $("lbClose").onclick = () => { show("lightbox", false); lightboxPhoto = null; };
 $("lbDel").onclick = async () => {
   if (!lightboxPhoto) return;
   if (!confirm("Delete this photo? It cannot be undone.")) return;
+  const isPlant = lightboxPhoto.kind === "plant";
   await db.storage.from(BUCKET).remove([lightboxPhoto.path]);
-  const { error } = await db.from("photos").delete().eq("id", lightboxPhoto.id);
+  const { error } = await db.from(isPlant ? "photos" : "supply_photos")
+    .delete().eq("id", lightboxPhoto.id);
   show("lightbox", false);
   if (error) return say(error.message,"err");
   say("Photo deleted.");
-  loadPhotos(currentPlant.id);
+  if (isPlant) loadPhotos(currentPlant.id); else loadSupplyPhotos(currentSupply.id);
 };
 
 async function loadBlooms(plantId){
@@ -616,6 +726,180 @@ $("save").onclick = async () => {
   if (error) return say(error.message,"err");
   say(editingId ? "Saved." : `Saved as tag ${$("tag").value}. Put that number on the plant.`);
   showList();
+};
+
+let allSupplies = [];
+let supplyUrls = {};
+let currentSupply = null;
+let editingSupplyId = null;
+
+const money = n => n === null || n === undefined ? null
+  : new Intl.NumberFormat(undefined,{style:"currency",currency:"USD"}).format(n);
+
+async function loadSupplies(){
+  const { data, error } = await db.from("supply_overview").select("*").order("product");
+  if (error){ $("supplies").innerHTML = `<div class="err">${error.message}</div>`; return; }
+  allSupplies = data;
+  supplyUrls = await signedUrls(data.map(s => s.latest_photo));
+  renderSupplies();
+}
+
+function renderSupplies(){
+  const q = $("supplySearch").value.trim().toLowerCase();
+  let data = allSupplies;
+  if (q) data = data.filter(s =>
+    [s.product, s.item_number, s.vendor, s.notes, s.amount]
+      .filter(Boolean).some(v => String(v).toLowerCase().includes(q)));
+
+  $("supplyCount").textContent = data.length === allSupplies.length
+    ? allSupplies.length : `${data.length} of ${allSupplies.length}`;
+
+  if (!allSupplies.length){ $("supplies").innerHTML = `<div class="empty">Nothing yet. Add your first supply below.</div>`; return; }
+  if (!data.length){ $("supplies").innerHTML = `<div class="empty">Nothing matches that.</div>`; return; }
+
+  $("supplies").innerHTML = data.map(s => `
+    <div class="plant" data-id="${s.id}">
+      ${s.latest_photo && supplyUrls[s.latest_photo]
+        ? `<img class="thumb" src="${supplyUrls[s.latest_photo]}" alt="">`
+        : `<span class="tag" style="font-size:20px">·</span>`}
+      <div style="flex:1">
+        <h3>${s.product}</h3>
+        <div class="meta">${[s.vendor, s.amount].filter(Boolean).join(" · ") || "&nbsp;"}</div>
+        <div style="margin-top:6px">
+          ${s.cost !== null ? `<span class="pill">${money(s.cost)}</span>` : ""}
+          ${s.item_number ? `<span class="pill">#${s.item_number}</span>` : ""}
+        </div>
+      </div>
+    </div>`).join("");
+  $("supplies").querySelectorAll(".plant").forEach(el =>
+    el.onclick = () => openSupply(allSupplies.find(s => s.id === el.dataset.id)));
+}
+
+$("supplySearch").oninput = renderSupplies;
+
+function openSupply(s){
+  currentSupply = s;
+  hideAllViews();
+  show("supplyDetailView", true);
+  $("sName").textContent = s.product;
+  $("sSub").textContent = s.vendor || "";
+  const site = s.vendor_website
+    ? (s.vendor_website.startsWith("http") ? s.vendor_website : "https://" + s.vendor_website)
+    : null;
+  const facts = [
+    s.item_number && ["Item number", s.item_number],
+    s.amount && ["How much", s.amount],
+    s.cost !== null && ["Cost", money(s.cost)],
+    s.vendor_phone && ["Phone", `<a href="tel:${s.vendor_phone}">${s.vendor_phone}</a>`],
+    site && ["Website", `<a href="${site}" target="_blank" rel="noopener">${s.vendor_website}</a>`],
+    s.purchased_on && ["Bought", fmt(s.purchased_on)]
+  ].filter(Boolean);
+  $("sFacts").innerHTML = facts.map(([k,v]) =>
+    `<div class="bloomrow"><span class="meta">${k}</span><span>${v}</span></div>`).join("");
+  $("sNotesOut").textContent = s.notes || "";
+  loadSupplyPhotos(s.id);
+}
+
+async function loadSupplyPhotos(supplyId){
+  const { data, error } = await db.from("supply_photos").select("*")
+    .eq("supply_id", supplyId).order("created_at",{ascending:false});
+  if (error){ $("sPhotos").innerHTML = `<div class="err">${error.message}</div>`; return; }
+  const hero = $("sHero");
+  if (!data.length){
+    $("sPhotos").innerHTML = `<div class="empty">No photos yet</div>`;
+    hero.classList.add("hidden");
+    return;
+  }
+  const urls = await signedUrls(data.map(p => p.path));
+  hero.src = urls[data[0].path] || "";
+  hero.classList.toggle("hidden", !urls[data[0].path]);
+  $("sPhotos").innerHTML = `<div class="gallery">` + data.map(ph => `
+    <figure><img src="${urls[ph.path]||""}" data-id="${ph.id}" data-path="${ph.path}" alt=""></figure>`
+  ).join("") + `</div>`;
+  $("sPhotos").querySelectorAll("img").forEach(img => {
+    img.onclick = () => {
+      lightboxPhoto = { id: img.dataset.id, path: img.dataset.path, kind: "supply" };
+      $("lbImg").src = img.src;
+      show("lightbox", true);
+    };
+  });
+}
+
+$("sPhotoBtn").onclick = () => $("sPhotoInput").click();
+$("sPhotoInput").onchange = async e => {
+  const files = [...e.target.files];
+  e.target.value = "";
+  if (!files.length) return;
+  show("sPhotoBusy", true);
+  let done = 0;
+  for (const file of files){
+    try {
+      const blob = await shrink(file);
+      const path = `supplies/${currentSupply.id}/${crypto.randomUUID()}.jpg`;
+      const up = await db.storage.from(BUCKET).upload(path, blob, { contentType:"image/jpeg" });
+      if (up.error) throw up.error;
+      const ins = await db.from("supply_photos").insert({ supply_id: currentSupply.id, path });
+      if (ins.error) throw ins.error;
+      done++;
+    } catch (err){ say(err.message || "That photo would not upload","err"); }
+  }
+  show("sPhotoBusy", false);
+  if (done){ say(done === 1 ? "Photo added." : `${done} photos added.`); loadSupplyPhotos(currentSupply.id); }
+};
+
+const SUPPLY_FIELDS = ["sProduct","sItem","sVendor","sPhone","sSite","sAmount","sCost","sDate","sNotes"];
+
+$("addSupplyBtn").onclick = () => {
+  editingSupplyId = null;
+  $("supplyFormTitle").textContent = "Add a supply";
+  SUPPLY_FIELDS.forEach(f => $(f).value = "");
+  hideAllViews();
+  show("supplyFormView", true);
+  $("sProduct").focus();
+};
+
+$("supplyEditBtn").onclick = () => {
+  const s = currentSupply;
+  editingSupplyId = s.id;
+  $("supplyFormTitle").textContent = "Edit supply";
+  $("sProduct").value = s.product || "";
+  $("sItem").value = s.item_number || "";
+  $("sVendor").value = s.vendor || "";
+  $("sPhone").value = s.vendor_phone || "";
+  $("sSite").value = s.vendor_website || "";
+  $("sAmount").value = s.amount || "";
+  $("sCost").value = s.cost !== null ? s.cost : "";
+  $("sDate").value = s.purchased_on || "";
+  $("sNotes").value = s.notes || "";
+  hideAllViews();
+  show("supplyFormView", true);
+};
+
+$("supplyCancel").onclick = showSupplies;
+$("supplyBackBtn").onclick = showSupplies;
+
+$("supplySave").onclick = async () => {
+  const product = $("sProduct").value.trim();
+  if (!product) return say("Give it a product name first.","err");
+  const rec = {
+    product,
+    item_number:    $("sItem").value.trim() || null,
+    vendor:         $("sVendor").value.trim() || null,
+    vendor_phone:   $("sPhone").value.trim() || null,
+    vendor_website: $("sSite").value.trim() || null,
+    amount:         $("sAmount").value.trim() || null,
+    cost:           $("sCost").value !== "" ? Number($("sCost").value) : null,
+    purchased_on:   $("sDate").value || null,
+    notes:          $("sNotes").value.trim() || null
+  };
+  $("supplySave").disabled = true;
+  const { error } = editingSupplyId
+    ? await db.from("supplies").update(rec).eq("id", editingSupplyId)
+    : await db.from("supplies").insert(rec);
+  $("supplySave").disabled = false;
+  if (error) return say(error.message,"err");
+  say("Saved.");
+  showSupplies();
 };
 
 $("structure").innerHTML = `<option value="">Choose a place…</option>` +
