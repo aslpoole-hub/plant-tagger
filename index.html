@@ -177,6 +177,10 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
             <label for="pfrom">Purchased from</label>
             <input id="pfrom" placeholder="Vendor, show, person">
           </div>
+          <div style="flex:0 0 130px">
+            <label for="pcost">Price paid</label>
+            <input id="pcost" type="number" step="0.01" inputmode="decimal" placeholder="0.00">
+          </div>
         </div>
 
         <label for="notes">Notes</label>
@@ -644,6 +648,8 @@ async function openPlant(p){
   const facts = [
     p.bloom_color && ["Bloom color", p.bloom_color],
     p.purchased_on && ["Purchased", fmt(p.purchased_on) + (p.purchased_from ? ` from ${p.purchased_from}` : "")],
+    (!p.purchased_on && p.purchased_from) && ["Purchased from", p.purchased_from],
+    p.cost !== null && p.cost !== undefined && ["Price paid", money(p.cost)],
     p.age_years !== null && ["Owned", p.age_years >= 1
       ? p.age_years + (p.age_years === 1 ? " year" : " years")
       : "since " + fmt(p.purchased_on)],
@@ -752,7 +758,7 @@ $("bloomPhotoInput").onchange = async e => {
 $("addBtn").onclick = async () => {
   editingId = null;
   $("formTitle").textContent = "Add a plant";
-  ["name","variety","color","structure","structureDetail","pfrom","notes"].forEach(i => $(i).value = "");
+  ["name","variety","color","structure","structureDetail","pfrom","pcost","notes"].forEach(i => $(i).value = "");
   $("pdate").value = "";
   syncDetailField();
   const { data } = await db.from("plants").select("tag_number").order("tag_number",{ascending:false}).limit(1);
@@ -772,6 +778,7 @@ $("editBtn").onclick = () => {
   syncDetailField();
   $("structureDetail").value = p.structure_detail || "";
   $("pdate").value = p.purchased_on || ""; $("pfrom").value = p.purchased_from || "";
+  $("pcost").value = (p.cost !== null && p.cost !== undefined) ? p.cost : "";
   $("notes").value = p.notes || "";
   show("detailView",false); show("formView",true);
 };
@@ -790,6 +797,7 @@ $("save").onclick = async () => {
     structure_detail: (NEEDS_DETAIL[$("structure").value] && $("structureDetail").value.trim()) || null,
     purchased_on: $("pdate").value || null,
     purchased_from: $("pfrom").value.trim() || null,
+    cost: $("pcost").value !== "" ? Number($("pcost").value) : null,
     notes: $("notes").value.trim() || null
   };
   $("save").disabled = true;
