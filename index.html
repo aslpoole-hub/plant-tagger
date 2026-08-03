@@ -123,6 +123,7 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
         <div class="row" style="margin-top:10px; align-items:center">
           <select id="placeFilter"><option value="">All places</option></select>
           <button class="ghost" id="bloomFilter" data-on="0" style="flex:0 0 auto">Blooming now</button>
+          <button class="ghost" id="tagFilter" data-on="0" style="flex:0 0 auto">Needs tag</button>
         </div>
       </div>
 
@@ -143,14 +144,14 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
           </div>
           <div>
             <label for="name">Name</label>
-            <input id="name" placeholder="What you call it">
+            <input id="name" list="genera" placeholder="What you call it">
           </div>
         </div>
 
         <div class="row">
           <div>
             <label for="variety">Variety or species</label>
-            <input id="variety" placeholder="If you know it">
+            <input id="variety" list="genera" placeholder="If you know it">
           </div>
           <div>
             <label for="color">Bloom color</label>
@@ -219,8 +220,10 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
         <input id="bloomPhotoInput" type="file" accept="image/*" capture="environment" class="hidden">
       </div>
 
+      <button class="ghost" id="tagBtn" style="width:100%; margin-bottom:10px">Mark tag as hung</button>
       <button class="ghost" id="editBtn" style="width:100%; margin-bottom:10px">Edit this plant</button>
-      <button class="ghost" id="backBtn" style="width:100%">Back to all plants</button>
+      <button class="ghost" id="backBtn" style="width:100%; margin-bottom:10px">Back to all plants</button>
+      <button class="ghost" id="deleteBtn" style="width:100%; color:#8a1f1f">Delete this plant</button>
     </div>
 
     <div id="quickView" class="hidden">
@@ -238,7 +241,7 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
         <div class="hint">Stays put between plants.</div>
 
         <label for="qName">Name</label>
-        <input id="qName" placeholder="What you call it">
+        <input id="qName" list="genera" placeholder="Start typing — it suggests orchid names">
 
         <div style="height:14px"></div>
         <button class="ghost" id="qPhotoBtn" style="width:100%">Take a photo</button>
@@ -345,6 +348,8 @@ h2{font-size:16px; margin:0 0 10px; font-weight:600}
   <button class="primary" id="addSupplyBtn">Add a supply</button>
 </div>
 
+<datalist id="genera"></datalist>
+
 <div id="lightbox" class="lightbox hidden">
   <button class="close" id="lbClose">Close</button>
   <img id="lbImg" alt="">
@@ -364,6 +369,17 @@ const PLACES = [
   "Big Tree",
   "Tree", "Log", "Other"
 ];
+const GENERA = [
+  "Aerangis","Angraecum","Ascocenda","Barkeria","Bletia","Brassavola","Brassia",
+  "Broughtonia","Bulbophyllum","Calanthe","Catasetum","Cattleya","Coelogyne",
+  "Cycnoches","Cymbidium","Dendrobium","Dendrochilum","Encyclia","Epidendrum",
+  "Grammatophyllum","Guarianthe","Laelia","Lycaste","Masdevallia","Maxillaria",
+  "Miltonia","Miltoniopsis","Mormodes","Myrmecophila","Oncidium","Paphiopedilum",
+  "Phalaenopsis","Phragmipedium","Prosthechea","Psychopsis","Renanthera",
+  "Rhyncholaelia","Rhynchostele","Schomburgkia","Sobralia","Spathoglottis",
+  "Stanhopea","Tolumnia","Trichocentrum","Vanda","Vanilla","Zygopetalum"
+];
+
 const NEEDS_DETAIL = {
   "Tree":  { label:"Which tree?",  hint:"A tree that isn't Big Tree" },
   "Log":   { label:"Which log?",   hint:"Anything that tells them apart" },
@@ -543,10 +559,12 @@ function renderPlants(){
   const q = $("search").value.trim().toLowerCase();
   const place = $("placeFilter").value;
   const bloomOnly = $("bloomFilter").dataset.on === "1";
+  const untaggedOnly = $("tagFilter").dataset.on === "1";
 
   let data = allPlants;
   if (place) data = data.filter(p => p.structure === place);
   if (bloomOnly) data = data.filter(p => p.currently_blooming);
+  if (untaggedOnly) data = data.filter(p => !p.tagged);
   if (q){
     const asNum = /^\d+$/.test(q) ? parseInt(q,10) : null;
     data = data.filter(p =>
@@ -574,6 +592,7 @@ function renderPlants(){
         <h3>${p.latest_photo ? p.tag_number + " · " : ""}${p.name}</h3>
         <div class="meta">${[p.variety, placeLabel(p)].filter(Boolean).join(" · ") || "&nbsp;"}</div>
         <div style="margin-top:6px">
+          ${!p.tagged ? '<span class="pill" style="background:#fbeedd; color:#8a5a12">needs tag</span>' : ""}
           ${p.currently_blooming ? '<span class="pill flower">blooming now</span>' : ""}
           ${p.bloom_color ? `<span class="pill">${p.bloom_color}</span>` : ""}
           ${p.age_years >= 1 ? `<span class="pill">owned ${p.age_years} yr</span>` : ""}
@@ -586,17 +605,46 @@ function renderPlants(){
 
 $("search").oninput = renderPlants;
 $("placeFilter").onchange = renderPlants;
-$("bloomFilter").onclick = () => {
-  const b = $("bloomFilter");
+function toggleFilter(id){
+  const b = $(id);
   const on = b.dataset.on === "1";
   b.dataset.on = on ? "0" : "1";
   b.style.background = on ? "var(--white)" : "var(--leaf)";
   renderPlants();
+}
+$("bloomFilter").onclick = () => toggleFilter("bloomFilter");
+$("tagFilter").onclick = () => toggleFilter("tagFilter");
+
+$("tagBtn").onclick = async () => {
+  const now = !currentSupply && currentPlant ? !currentPlant.tagged : true;
+  const { error } = await db.from("plants").update({ tagged: now }).eq("id", currentPlant.id);
+  if (error) return say(error.message,"err");
+  currentPlant.tagged = now;
+  syncTagBtn();
+  say(now ? "Marked as tagged." : "Marked as needing a tag.");
+};
+
+function syncTagBtn(){
+  $("tagBtn").textContent = currentPlant.tagged ? "Tagged ✓ — tap to undo" : "Mark tag as hung";
+  $("tagBtn").style.background = currentPlant.tagged ? "var(--leaf)" : "var(--white)";
+}
+
+$("deleteBtn").onclick = async () => {
+  const p = currentPlant;
+  if (!confirm(`Delete "${p.name}" (tag ${p.tag_number})?\n\nThis removes its photos and bloom history for good. Tag number ${p.tag_number} will not be reused.`)) return;
+  const { data: pics } = await db.from("photos").select("path").eq("plant_id", p.id);
+  if (pics && pics.length) await db.storage.from(BUCKET).remove(pics.map(x => x.path));
+  const { error } = await db.from("plants").delete().eq("id", p.id);
+  if (error) return say(error.message,"err");
+  say(`Deleted tag ${p.tag_number}.`);
+  showList();
 };
 
 async function openPlant(p){
   currentPlant = p;
-  show("listView",false); show("formView",false); show("detailView",true); show("bar",false);
+  hideAllViews();
+  show("detailView",true);
+  syncTagBtn();
   $("dTag").textContent = p.tag_number;
   $("dName").textContent = p.name;
   $("dSub").textContent = [p.variety, placeLabel(p)].filter(Boolean).join(" · ") || "";
@@ -1021,6 +1069,7 @@ const placeOptions = `<option value="">Choose a place…</option>` +
 $("structure").innerHTML = placeOptions;
 $("qStructure").innerHTML = placeOptions;
 $("structure").onchange = syncDetailField;
+$("genera").innerHTML = GENERA.map(g => `<option value="${g}">`).join("");
 
 boot();
 </script>
